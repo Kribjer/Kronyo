@@ -1,0 +1,135 @@
+---
+title: "Homework 2"
+author: "Kristian Bjerke"
+date: "13/09/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(httr)
+library(rjstat)
+library(lubridate)
+#Laster ned conflicted for å unngå pakke-konflikter.
+library(conflicted)
+
+#Laster ned zoo for å få fikset dato-formatet.
+library(zoo)
+
+conflict_prefer("filter", "dplyr")
+```
+
+```{r, include=FALSE}
+url1 <- "http://data.ssb.no/api/v0/dataset/95274.json?lang=no"
+d.temp <- GET(url1)
+sbtabell <- fromJSONstat(content(d.temp, "text"))
+ds <- sbtabell[[1]]
+```
+
+```{r, include=FALSE}
+url <- "http://data.ssb.no/api/v0/dataset/95276.json?lang=no"
+d.temp <- GET(url)
+sbtabell2 <- fromJSONstat(content(d.temp, "text"))
+ds2 <- sbtabell2[[1]]
+```
+
+```{r, include=FALSE}
+totaldata <- rbind(ds, ds2)
+
+#Problemer med å kode inn en vector c(), brukte heller separat renaming
+
+totaldata <- rename(totaldata, "Region"="region")
+totaldata <- rename(totaldata, "Date"="måned")
+totaldata <- rename(totaldata, "Variable"="statistikkvariabel")
+totaldata <- rename(totaldata, "Value"="value")
+
+totaldata$Date <- as.Date(as.yearmon(totaldata$Date, "%YM%m"))
+
+totaldata$Variable <- recode(totaldata$Variable, "Kapasitetsutnytting av senger (prosent)" = "Beds percentage capacity utilization", "Kapasitetsutnytting av rom (prosent)" = 	
+"Rooms percentage capacity utilization", "Pris per rom (kr)" = "Price per room")
+
+
+```
+
+```{r}
+# Denne funker. Task 1, brukte hver tredje rad for å få pris.
+priceOnly = totaldata[seq(3, nrow(totaldata), 3), ]
+  
+diffcounty <- priceOnly %>%
+group_by(Region) %>%
+summarize(averagePrice = mean(Value[which(Value!=0.0)]))
+
+maxdiff <- max(diffcounty$averagePrice)
+mindiff <- min(diffcounty$averagePrice)
+
+
+paste("(Task 1) The county with the highest average room price is Svalbard with a price of", maxdiff, "Norwegian crowns.", "The county with the lowest average room price is Oppland, with a price of", mindiff, "norwegian crowns.")
+
+
+
+
+
+```
+```{r}
+#Task 2
+
+diffyear <- priceOnly %>%
+  mutate(Year=year(Date)) %>%
+  filter(Value > 0) %>%
+group_by(Region, Year) %>%
+  summarize(averagePrice = mean(Value, na.rm = TRUE))
+
+max(diffyear$averagePrice)
+which.max(diffyear$averagePrice)
+
+min(diffyear$averagePrice)
+which.min(diffyear$averagePrice)
+
+print("(Task 2) Max average price is 1648kr, which was in Svalbard 2016. Minimum average price is 480kr, which was in Hedmark 1992.")
+
+```
+
+```{r}
+#Task 3
+
+diffTroms <- priceOnly %>%
+filter(Region == "Troms - Romsa", Date >= "1999-01-01" & Date <= "2019-07-01") %>%
+group_by(Date)
+
+diffTromsPlot <- ggplot(diffTroms, aes(x = Date, y = Value)) +
+  geom_line() +
+  ggtitle("Price difference per month in Tromsø county from 1999-2019")
+
+print(diffTromsPlot)
+
+
+```
+```{r}
+#Task 4
+
+corplot1 = totaldata[seq(2, nrow(totaldata), 3), ]
+
+corplot1 <- corplot1 %>%
+  filter(Date >= "2010-01-01" & Date <= "2019-07-01") %>%
+  group_by(Value)
+
+corplot2 <- priceOnly %>%
+  filter(Date >= "2010-01-01" & Date <= "2019-07-01") %>%
+  group_by(Value)
+
+x <- corplot1[4]
+y <- corplot2[4]
+
+cor(x, y)
+
+print("(Task 4) The correlation between room capacity and price since January 2010 is 0.728.")
+
+
+
+```
+
